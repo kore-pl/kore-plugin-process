@@ -33,6 +33,14 @@ type fakeSource struct {
 	probeErr   error
 	signals    []Signal
 	probed     []int
+	niceCalls  []niceCall
+	niceErr    error
+}
+
+// niceCall 记录一次 SetNice 调用。
+type niceCall struct {
+	pid   int
+	value int
 }
 
 // Scan 返回记录副本。
@@ -62,6 +70,17 @@ func (f *fakeSource) Signal(pid int, sig Signal) error {
 	return f.signalErr
 }
 
+// SetNice 记录优先级调整并同步改写记录（模拟真实内核：renice 后 stat 读到新值）。
+func (f *fakeSource) SetNice(pid int, value int) error {
+	f.niceCalls = append(f.niceCalls, niceCall{pid: pid, value: value})
+	for i := range f.records {
+		if f.records[i].PID == pid {
+			f.records[i].Nice = value
+		}
+	}
+	return f.niceErr
+}
+
 // Probe 返回预设状态字符。
 func (f *fakeSource) Probe(pid int) (byte, error) {
 	f.probed = append(f.probed, pid)
@@ -72,6 +91,7 @@ func (f *fakeSource) Probe(pid int) (byte, error) {
 }
 
 // spawnSleeper 以自定义 argv 启动本测试二进制作为长睡进程；默认 SIGTERM 即退出。
+// 注意 comm 恒为测试二进制名（argv 改名不影响 comm），需要 comm="sleep" 的场景用 spawnRealSleep。
 func spawnSleeper(t *testing.T, argv ...string) *exec.Cmd {
 	t.Helper()
 	command := exec.Command(os.Args[0])
@@ -89,6 +109,53 @@ func spawnSleeper(t *testing.T, argv ...string) *exec.Cmd {
 	})
 	waitExists(t, command.Process.Pid, 2*time.Second)
 	return command
+}
+
+// spawnRealSleep 启动真实 /bin/sleep 300（comm=sleep），并等 exec 完成——
+// 子进程在 exec 前后 /proc/<pid> 已存在，cmdline 可能短暂读到空串（见
+// raceprobe_test.go 的真实瞬态），所以先等 comm 稳定再做 name 复核。
+func spawnRealSleep(t *testing.T) *exec.Cmd {
+	t.Helper()
+	path, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatalf("找不到 sleep 命令: %v", err)
+	}
+	command := exec.Command(path, "300")
+	command.Stdout, command.Stderr = io.Discard, io.Discard
+	if err := command.Start(); err != nil {
+		t.Fatalf("启动 sleep 失败: %v", err)
+	}
+	t.Cleanup(func() {
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			_, _ = command.Process.Wait()
+		}
+	})
+	waitExists(t, command.Process.Pid, 2*time.Second)
+	waitComm(t, command.Process.Pid, "sleep", 2*time.Second)
+	return command
+}
+
+// waitComm 轮询 /proc/<pid>/stat 直到 comm 等于 want（exec 完成的可靠信号）。
+func waitComm(t *testing.T, pid int, want string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if info, err := parseStatFile(pid); err == nil && info.Name == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("pid %d 的 comm 在 %s 内未变成 %q", pid, timeout, want)
+}
+
+// parseStatFile 读取 /proc/<pid>/stat 并解析（用于复核真实 nice / comm 生效）。
+func parseStatFile(pid int) (statInfo, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return statInfo{}, err
+	}
+	return parseStat(string(data))
 }
 
 // waitExists 等待 /proc/<pid> 出现（子进程 exec 完成）。

@@ -9,17 +9,21 @@ import (
 )
 
 // ProcessEntry 是 process.list 返回的单条进程记录；字段显式列出，不使用 any / object。
+// protected=true 表示该进程在保护名单内（前端据此加锁标并禁用终止 / 优先级操作）。
 type ProcessEntry struct {
 	PID              int     `json:"pid"`
 	Name             string  `json:"name"`
 	State            string  `json:"state"`
 	User             string  `json:"user"`
 	UID              uint32  `json:"uid"`
+	Nice             int     `json:"nice"`
 	RSSKiB           int64   `json:"rss_kib"`
 	CPUPercent       float64 `json:"cpu_pct"`
 	Cmdline          string  `json:"cmdline"`
 	Restricted       bool    `json:"restricted"`
 	RestrictedReason string  `json:"restricted_reason,omitempty"`
+	Protected        bool    `json:"protected"`
+	ProtectedReason  string  `json:"protected_reason,omitempty"`
 }
 
 // listResult 是 process.list 的结构；first_sample=true 时 cpu_pct 全 0。
@@ -90,19 +94,23 @@ func (r *Runtime) callList(raw json.RawMessage) (json.RawMessage, *pluginapi.Err
 	return encode(result)
 }
 
-// toEntry 把内部记录格式化为对外条目（用户名称、脱敏命令行、CPU 百分比）。
+// toEntry 把内部记录格式化为对外条目（用户名称、脱敏命令行、CPU 百分比、保护标记）。
 func (r *Runtime) toEntry(record Record, cpuPercent float64) ProcessEntry {
+	reason := r.protectionReason(record)
 	return ProcessEntry{
 		PID:              record.PID,
 		Name:             record.Name,
 		State:            record.StateString(),
 		User:             r.users.lookup(record.UID),
 		UID:              record.UID,
+		Nice:             record.Nice,
 		RSSKiB:           record.RSSKiB,
 		CPUPercent:       cpuPercent,
 		Cmdline:          maskCmdline(record.Cmdline, r.opts.MaskArgs),
 		Restricted:       record.Restricted,
 		RestrictedReason: record.RestrictedReason,
+		Protected:        reason != "",
+		ProtectedReason:  reason,
 	}
 }
 

@@ -67,6 +67,21 @@ func unauthorized(msg string) *pluginapi.Error {
 	return &pluginapi.Error{Code: pluginapi.E_UNAUTHORIZED, Message: msg}
 }
 
+// conflict 构造状态冲突错误（如 PID 复用导致名称不符）。
+func conflict(msg string) *pluginapi.Error {
+	return &pluginapi.Error{Code: pluginapi.E_CONFLICT, Message: msg}
+}
+
+// codeNeedRoot 是 ADR-0018 定义的协议错误码（需宿主 root 权限）。已发布的
+// pluginapi SDK v0.1.1 尚未收录该常量，这里以协议字符串为准——与 kore 内核侧
+// pluginapi.E_NEED_ROOT 同值；SDK 发布新版后应替换回常量引用。
+const codeNeedRoot = "E_NEED_ROOT"
+
+// needRoot 构造需要宿主 root 权限的错误；message 按 ADR-0018 附可操作提示。
+func needRoot(msg string) *pluginapi.Error {
+	return &pluginapi.Error{Code: codeNeedRoot, Message: msg}
+}
+
 // unsupported 构造平台 / 能力不支持错误。
 func unsupported(msg string) *pluginapi.Error {
 	return &pluginapi.Error{Code: pluginapi.E_UNSUPPORTED, Message: msg}

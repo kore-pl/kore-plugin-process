@@ -1,4 +1,5 @@
-// Package main 是 kore 的 process 插件：真实进程列表 / 详情 / 信号 / 进程树。
+// Package main 是 kore 的 process 插件：真实进程列表 / 详情 / 信号 / 进程树 /
+// 优先级调整，并对 init、kored、kore 组件与内核线程做统一保护。
 //
 // 真实实现只读 Linux /proc：不读 /proc/kcore、不接受任意 /proc 路径，所有路径都由
 // 固定根 + 数字 pid + 固定文件名拼成。CPU 采样零 ticker——只在 process.list 调用时
@@ -13,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/pengtang1024/kore-plugin-process/internal/procfs"
 )
@@ -32,9 +34,13 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	selfExe, _ := os.Executable()
 	procRuntime := procfs.NewRuntime(procfs.Options{
 		ProcRoot:      procfs.DefaultProcRoot,
 		SelfPID:       os.Getpid(),
+		ParentPID:     os.Getppid(),
+		SocketDir:     filepath.Dir(cfg.socket),
+		SelfExe:       selfExe,
 		MaskArgs:      cfg.maskArgs,
 		ProtectedPIDs: cfg.protectedPIDs,
 	}, nil)

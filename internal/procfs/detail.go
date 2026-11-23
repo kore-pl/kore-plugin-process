@@ -27,6 +27,7 @@ type detailResult struct {
 	State            string      `json:"state"`
 	User             string      `json:"user"`
 	UID              uint32      `json:"uid"`
+	Nice             int         `json:"nice"`
 	Cmdline          string      `json:"cmdline"`
 	Exe              string      `json:"exe"`
 	Cwd              string      `json:"cwd"`
@@ -37,6 +38,8 @@ type detailResult struct {
 	ElapsedS         int64       `json:"elapsed_s"`
 	Restricted       bool        `json:"restricted"`
 	RestrictedReason string      `json:"restricted_reason,omitempty"`
+	Protected        bool        `json:"protected"`
+	ProtectedReason  string      `json:"protected_reason,omitempty"`
 }
 
 // detailParams 是 process.detail 入参。
@@ -61,6 +64,7 @@ func (r *Runtime) callDetail(raw json.RawMessage) (json.RawMessage, *pluginapi.E
 		return nil, classify(err)
 	}
 	startedAt, elapsed := r.startTime(record)
+	reason := r.protectionReason(record)
 	return encode(detailResult{
 		Schema:           "process.detail.v1",
 		PID:              record.PID,
@@ -69,6 +73,7 @@ func (r *Runtime) callDetail(raw json.RawMessage) (json.RawMessage, *pluginapi.E
 		State:            record.StateString(),
 		User:             r.users.lookup(record.UID),
 		UID:              record.UID,
+		Nice:             record.Nice,
 		Cmdline:          maskCmdline(record.Cmdline, r.opts.MaskArgs),
 		Exe:              record.Exe,
 		Cwd:              record.Cwd,
@@ -79,6 +84,8 @@ func (r *Runtime) callDetail(raw json.RawMessage) (json.RawMessage, *pluginapi.E
 		ElapsedS:         elapsed,
 		Restricted:       record.Restricted,
 		RestrictedReason: record.RestrictedReason,
+		Protected:        reason != "",
+		ProtectedReason:  reason,
 	})
 }
 

@@ -13,5 +13,8 @@ func signalNumber(Signal) int { return 0 }
 // sendSignal 在非 Linux 上显式失败，不静默降级。
 func sendSignal(int, Signal) error { return errPlatformUnsupported }
 
+// setNice 在非 Linux 上显式失败，不静默降级。
+func setNice(int, int) error { return errPlatformUnsupported }
+
 // isNoSuchProcess 在非 Linux 上没有 ESRCH 语义。
 func isNoSuchProcess(error) bool { return false }

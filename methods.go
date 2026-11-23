@@ -43,7 +43,7 @@ func dispatch(request *pluginapi.Request, cfg config, procRuntime *procfs.Runtim
 func normalizeMethod(method, id string) (string, bool) {
 	verb := strings.TrimPrefix(method, id+".")
 	switch verb {
-	case "list", "detail", "kill", "tree":
+	case "list", "detail", "kill", "tree", "renice":
 		return "process." + verb, true
 	default:
 		return "", false

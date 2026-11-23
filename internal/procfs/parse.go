@@ -11,6 +11,7 @@ type statInfo struct {
 	Name       string
 	State      byte
 	PPID       int
+	Nice       int
 	UTicks     uint64
 	STicks     uint64
 	StartTicks uint64
@@ -35,7 +36,8 @@ func parseStat(data string) (statInfo, error) {
 	}
 	info := statInfo{Name: data[open+1 : closeAt]}
 	fields := strings.Fields(data[closeAt+1:])
-	// fields[0] 是第 3 字段 state；utime/stime/starttime 分别是第 14/15/22 字段，即索引 11/12/19。
+	// fields[0] 是第 3 字段 state；utime/stime/starttime 分别是第 14/15/22 字段，即索引 11/12/19；
+	// nice 是第 19 字段，即索引 16。
 	if len(fields) < 20 {
 		return statInfo{}, fmt.Errorf("stat 字段数 %d 少于 20", len(fields))
 	}
@@ -48,6 +50,9 @@ func parseStat(data string) (statInfo, error) {
 		return statInfo{}, fmt.Errorf("stat ppid 解析失败: %w", err)
 	}
 	info.PPID = ppid
+	if info.Nice, err = strconv.Atoi(fields[16]); err != nil {
+		return statInfo{}, fmt.Errorf("stat nice 解析失败: %w", err)
+	}
 	if info.UTicks, err = parseUintField(fields[11], "utime"); err != nil {
 		return statInfo{}, err
 	}

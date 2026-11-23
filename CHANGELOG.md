@@ -5,6 +5,39 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-23
+
+### Added
+
+- 进程保护名单（`internal/procfs/protect.go`）：kill / renice 共用同一份策略，PID 1、
+  插件自身、`KORE_PROTECTED_PIDS`、插件父进程（kored）、`comm=kored`、`comm` 带 `kore-`
+  前缀、内核线程（cmdline 为空且 ppid ∈ {0,2}）、可执行文件位于 `<state>/plugins/` 同根
+  或 socket 同目录的进程一律拒绝；判定只依赖 `/proc` 字段与运行期注入选项，拒绝原因
+  逐条回给前端（`protected` / `protected_reason`）。
+- `process.renice`：nice 取值 `0..19`，`confirm:true` 必填、`name` 可选复核 PID 复用；
+  非 root 仅允许调大（降低优先级），调小或执行面 `EPERM` 返回 `E_NEED_ROOT`；结果含
+  `previous` / `nice` / `changed`。
+- list / detail 增加 `nice` 与 `protected` / `protected_reason` 字段。
+
+### Changed
+
+- `process.kill` 升级 schema v2：四层护栏（`confirm`、`name` 与 `/proc` comm 复核防 PID
+  复用、SIGKILL 额外要 `force`、保护名单）；返回字段 `comm` → `name`；投递 `EPERM` 由
+  `E_UNAUTHORIZED` 改为 `E_NEED_ROOT`，名称不符返回 `E_CONFLICT`。
+- `process.tree` 升级 schema v2：`root` 缺省/0 输出全系统森林（`roots[]`），新增 `total`
+  与节点 `children_count`，节点不再返回 `state`；子树模式入参 `pid` → `root`；全树与
+  成环输入都不会死循环或重复输出。
+- exec 后 `/proc/<pid>/cmdline` 可能短暂为空：保护名单以 ppid 判内核线程，空 cmdline 的
+  用户进程不会被误判（`raceprobe_test.go` 守护该瞬态）。
+
+### Tests
+
+- `internal/procfs`：保护名单九类矩阵、kill 四层护栏、renice 真实 sleeper 回读 nice、
+  全树森林与 PPID 成环、真实 kill / tree / 空 cmdline 瞬态。
+- `tests/e2e`：list（含 protected）→ detail（含 nice）→ tree 子树+全树 → kill 七条拒绝
+  路径 + TERM → 二次 list 消失 → renice 降优先级与被拒调高 → 脱敏 → shutdown。
+- `tests/fault`：四类故障注入覆盖五个方法（新增 renice）。
+
 ## [0.1.1] - 2026-11-23
 
 - build: 位级可复现打包（stage chmod + tar --mode 归一、size_bytes 收敛），二进制改嵌 manifest.json，消除同版本 sha 漂移

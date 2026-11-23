@@ -1,7 +1,7 @@
 //go:build linux
 
 // Package fault 对 process 插件做四类故障注入（kill / timeout / disk / cgroup）：
-// 每个用例把可控执行面替换为始终返回 FaultError 的实现，断言四个方法都把执行面
+// 每个用例把可控执行面替换为始终返回 FaultError 的实现，断言五个方法都把执行面
 // 故障映射成结构化协议错误码，而不是 panic 或伪成功。
 package fault
 
@@ -34,12 +34,17 @@ func (f faultSource) Signal(int, procfs.Signal) error {
 	return procfs.NewFaultError(f.kind, "signal 执行面故障")
 }
 
+// SetNice 注入故障。
+func (f faultSource) SetNice(int, int) error {
+	return procfs.NewFaultError(f.kind, "setnice 执行面故障")
+}
+
 // Probe 注入故障。
 func (f faultSource) Probe(int) (byte, error) {
 	return 0, procfs.NewFaultError(f.kind, "probe 执行面故障")
 }
 
-// methods 是故障注入覆盖的四个方法及其合法参数。
+// methods 是故障注入覆盖的五个方法及其合法参数（kill 带全四层护栏入参）。
 var methods = []struct {
 	name   string
 	method string
@@ -47,8 +52,9 @@ var methods = []struct {
 }{
 	{"list", "process.list", `{"limit":5}`},
 	{"detail", "process.detail", `{"pid":4242}`},
-	{"kill", "process.kill", `{"pid":4242}`},
-	{"tree", "process.tree", `{"pid":4242}`},
+	{"kill", "process.kill", `{"pid":4242,"confirm":true,"name":"victim"}`},
+	{"tree", "process.tree", `{}`},
+	{"renice", "process.renice", `{"pid":4242,"value":15,"confirm":true,"name":"victim"}`},
 }
 
 // newRuntime 构造指向注入执行面的 Runtime。
@@ -59,7 +65,7 @@ func newRuntime(t *testing.T, src procfs.Source) *procfs.Runtime {
 	}, src)
 }
 
-// assertFault 对四个方法注入同一类故障，断言 nil 结果 + 预期错误码与类别关键词。
+// assertFault 对五个方法注入同一类故障，断言 nil 结果 + 预期错误码与类别关键词。
 func assertFault(t *testing.T, kind procfs.FaultKind, wantCode, wantHint string) {
 	t.Helper()
 	rt := newRuntime(t, faultSource{kind: kind})
@@ -84,8 +90,15 @@ func assertFault(t *testing.T, kind procfs.FaultKind, wantCode, wantHint string)
 
 // healthySource 是无故障执行面：证明故障断言不是"永远失败"的假通过。
 type healthySource struct {
-	records []procfs.Record
-	signals []procfs.Signal
+	records   []procfs.Record
+	signals   []procfs.Signal
+	niceCalls []niceCall
+}
+
+// niceCall 记录一次 SetNice 调用。
+type niceCall struct {
+	pid   int
+	value int
 }
 
 // Scan 返回预设记录。
@@ -109,16 +122,23 @@ func (h *healthySource) Signal(pid int, sig procfs.Signal) error {
 	return nil
 }
 
+// SetNice 记录优先级调整。
+func (h *healthySource) SetNice(pid int, value int) error {
+	h.niceCalls = append(h.niceCalls, niceCall{pid: pid, value: value})
+	return nil
+}
+
 // Probe 返回已退出状态，便于 kill 立即返回。
 func (h *healthySource) Probe(int) (byte, error) { return 'Z', nil }
 
-// sanityNoFault 验证无故障时四个方法均正常返回。
+// sanityNoFault 验证无故障时五个方法均正常返回。
 func sanityNoFault(t *testing.T) {
 	t.Helper()
+	// 记录均代表用户态进程：cmdline 必须非空（空 cmdline 会被保护名单判成内核线程）。
 	src := &healthySource{records: []procfs.Record{
-		{PID: 4242, PPID: 1, Name: "root", State: 'S'},
-		{PID: 4243, PPID: 4242, Name: "child", State: 'S'},
-		{PID: 4244, PPID: 4242, Name: "victim", State: 'S'},
+		{PID: 4242, PPID: 1, Name: "root", State: 'S', Cmdline: "root --foreground"},
+		{PID: 4243, PPID: 4242, Name: "child", State: 'S', Cmdline: "child --worker"},
+		{PID: 4244, PPID: 4242, Name: "victim", State: 'S', Cmdline: "victim --port 8080"},
 	}}
 	rt := newRuntime(t, src)
 	cases := []struct {
@@ -127,8 +147,9 @@ func sanityNoFault(t *testing.T) {
 	}{
 		{"process.list", `{"limit":5}`},
 		{"process.detail", `{"pid":4242}`},
-		{"process.tree", `{"pid":4242}`},
-		{"process.kill", `{"pid":4244}`},
+		{"process.tree", `{"root":4242}`},
+		{"process.kill", `{"pid":4244,"confirm":true,"name":"victim"}`},
+		{"process.renice", `{"pid":4244,"value":15,"confirm":true,"name":"victim"}`},
 	}
 	for _, tc := range cases {
 		result, perr := rt.Call(tc.method, json.RawMessage(tc.params))
@@ -141,6 +162,9 @@ func sanityNoFault(t *testing.T) {
 	}
 	if len(src.signals) != 1 || src.signals[0] != procfs.SignalTERM {
 		t.Fatalf("无故障 kill 未投递 TERM: %v", src.signals)
+	}
+	if len(src.niceCalls) != 1 || src.niceCalls[0].value != 15 {
+		t.Fatalf("无故障 renice 未调整: %v", src.niceCalls)
 	}
 }
 

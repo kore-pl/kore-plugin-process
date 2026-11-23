@@ -16,10 +16,12 @@ type listItem struct {
 	State      string  `json:"state"`
 	User       string  `json:"user"`
 	UID        uint32  `json:"uid"`
+	Nice       int     `json:"nice"`
 	RSSKiB     int64   `json:"rss_kib"`
 	CPUPercent float64 `json:"cpu_pct"`
 	Cmdline    string  `json:"cmdline"`
 	Restricted bool    `json:"restricted"`
+	Protected  bool    `json:"protected"`
 }
 
 // listResult 是 process.list 的结果子集。
@@ -51,6 +53,7 @@ type detailResult struct {
 	Name       string       `json:"name"`
 	State      string       `json:"state"`
 	User       string       `json:"user"`
+	Nice       int          `json:"nice"`
 	Cmdline    string       `json:"cmdline"`
 	Exe        string       `json:"exe"`
 	Cwd        string       `json:"cwd"`
@@ -60,34 +63,46 @@ type detailResult struct {
 	StartedAt  string       `json:"started_at"`
 	ElapsedS   int64        `json:"elapsed_s"`
 	Restricted bool         `json:"restricted"`
+	Protected  bool         `json:"protected"`
 }
 
-// killResult 是 process.kill 的结果子集。
+// killResult 是 process.kill 的结果子集（v2：name 取代 comm）。
 type killResult struct {
 	Schema     string `json:"schema"`
 	PID        int    `json:"pid"`
 	Signal     string `json:"signal"`
-	Comm       string `json:"comm"`
+	Name       string `json:"name"`
 	Killed     bool   `json:"killed"`
 	StillAlive bool   `json:"still_alive"`
 	WaitedMS   int64  `json:"waited_ms"`
 	Note       string `json:"note"`
 }
 
-// treeNode 是 process.tree 的节点子集。
-type treeNode struct {
-	PID   int    `json:"pid"`
-	PPID  int    `json:"ppid"`
-	Name  string `json:"name"`
-	State string `json:"state"`
-	Depth int    `json:"depth"`
+// reniceResult 是 process.renice 的结果子集。
+type reniceResult struct {
+	Schema   string `json:"schema"`
+	PID      int    `json:"pid"`
+	Name     string `json:"name"`
+	Previous int    `json:"previous"`
+	Nice     int    `json:"nice"`
+	Changed  bool   `json:"changed"`
 }
 
-// treeResult 是 process.tree 的结果子集。
+// treeNode 是 process.tree 的节点子集（v2：children_count 取代 state）。
+type treeNode struct {
+	PID           int    `json:"pid"`
+	PPID          int    `json:"ppid"`
+	Name          string `json:"name"`
+	Depth         int    `json:"depth"`
+	ChildrenCount int    `json:"children_count"`
+}
+
+// treeResult 是 process.tree 的结果子集（v2：roots[] 取代 root）。
 type treeResult struct {
 	Schema    string     `json:"schema"`
-	Root      int        `json:"root"`
+	Roots     []int      `json:"roots"`
 	Count     int        `json:"count"`
+	Total     int        `json:"total"`
 	Truncated bool       `json:"truncated"`
 	MaxDepth  int        `json:"max_depth"`
 	MaxNodes  int        `json:"max_nodes"`
@@ -130,6 +145,16 @@ func parseTree(t *testing.T, raw string) treeResult {
 	var result treeResult
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("解析 tree 失败: %v (%s)", err, raw)
+	}
+	return result
+}
+
+// parseRenice 解析 renice 结果。
+func parseRenice(t *testing.T, raw string) reniceResult {
+	t.Helper()
+	var result reniceResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("解析 renice 失败: %v (%s)", err, raw)
 	}
 	return result
 }

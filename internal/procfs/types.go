@@ -118,6 +118,7 @@ type Record struct {
 	State            byte
 	PPID             int
 	UID              uint32
+	Nice             int
 	RSSKiB           int64
 	VmPeakKiB        int64
 	Threads          int
@@ -142,8 +143,8 @@ func (r Record) StateString() string {
 	return string(r.State)
 }
 
-// Source 是 /proc 采集与信号投递的执行面；nil 时 Runtime 使用真实 Linux 实现。
-// 故障注入测试用一个始终返回 FaultError 的实现覆盖四个方法。
+// Source 是 /proc 采集与信号 / 优先级投递的执行面；nil 时 Runtime 使用真实 Linux 实现。
+// 故障注入测试用一个始终返回 FaultError 的实现覆盖五个方法。
 type Source interface {
 	// Scan 扫描全部可读进程的公共字段（不含 exe/cwd 等重字段）。
 	Scan() ([]Record, error)
@@ -151,6 +152,8 @@ type Source interface {
 	Stat(pid int) (Record, error)
 	// Signal 向进程投递已校验的信号。
 	Signal(pid int, sig Signal) error
+	// SetNice 调整进程 nice 值（等价 renice(1)）。
+	SetNice(pid int, value int) error
 	// Probe 读取进程当前状态字符，用于 kill 后确认存活。
 	Probe(pid int) (byte, error)
 }

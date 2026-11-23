@@ -56,6 +56,9 @@ func (s procSource) Stat(pid int) (Record, error) { return s.read(pid, true) }
 // Signal 投递已校验的信号。
 func (s procSource) Signal(pid int, sig Signal) error { return sendSignal(pid, sig) }
 
+// SetNice 调整进程 nice 值（等价 renice(1)）；EPERM 由上层映射为 E_NEED_ROOT。
+func (s procSource) SetNice(pid int, value int) error { return setNice(pid, value) }
+
 // Probe 读取进程状态字符；进程不存在返回 fs.ErrNotExist。
 func (s procSource) Probe(pid int) (byte, error) {
 	data, err := s.readLimited(pid, "stat", 16<<10)
@@ -84,7 +87,7 @@ func (s procSource) read(pid int, full bool) (Record, error) {
 		return restrictedRecord(pid, err.Error()), nil
 	}
 	record := Record{
-		PID: pid, Name: info.Name, State: info.State, PPID: info.PPID,
+		PID: pid, Name: info.Name, State: info.State, PPID: info.PPID, Nice: info.Nice,
 		UTicks: info.UTicks, STicks: info.STicks, StartTicks: info.StartTicks,
 	}
 	if statusData, statusErr := s.readLimited(pid, "status", 64<<10); statusErr != nil {
@@ -99,6 +102,11 @@ func (s procSource) read(pid int, full bool) (Record, error) {
 		markRestricted(&record, "cmdline 不可读")
 	} else {
 		record.Cmdline = strings.Join(splitCmdline(cmdlineData), " ")
+	}
+	// 轻量路径顺带读 exe 链接（best-effort，失败不标 restricted）：保护名单要靠它识别
+	// 位于 kore 运行目录内的插件进程。详情路径的 exe/cwd 语义由 readLinks 保持不变。
+	if target, linkErr := os.Readlink(filepath.Join(s.root, strconv.Itoa(pid), "exe")); linkErr == nil {
+		record.Exe = target
 	}
 	if !full {
 		return record, nil
