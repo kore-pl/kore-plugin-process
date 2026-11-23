@@ -42,7 +42,7 @@ func dispatch(request *pluginapi.Request, cfg config, procRuntime *procfs.Runtim
 // businessVerbs 是 process 插件的业务方法动作清单：info.json 的 method_capabilities、
 // 本文件的方法分发与 method_capabilities_test.go 的一致性断言共用这一份事实来源。
 // 新增方法必须同步业务实现（Runtime.Call 分支）、info.json 与测试分类表。
-var businessVerbs = []string{"list", "detail", "kill", "tree", "renice", "ports"}
+var businessVerbs = []string{"list", "detail", "kill", "tree", "renice", "ports", "history", "trend", "watchdog.suggest"}
 
 // normalizeMethod 把 <id>.<verb> 或裸 <verb> 归一为 process.<verb>，非业务方法返回 false。
 func normalizeMethod(method, id string) (string, bool) {

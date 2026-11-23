@@ -35,6 +35,7 @@ var privilegedCapabilities = map[string]struct{}{
 // 这张表是"只读 / 写"分类的验收依据——把只读方法误升为 proc:write 会让只读调用进写审计。
 var readOnlyVerbs = map[string]struct{}{
 	"list": {}, "detail": {}, "tree": {}, "ports": {},
+	"history": {}, "trend": {}, "watchdog.suggest": {},
 }
 
 // writeVerbs 是写业务方法清单：必须声明 proc:write（内核按 admin 级判定）。
@@ -109,16 +110,17 @@ func TestMethodCapabilitiesMatchDispatch(t *testing.T) {
 				capability, method, info.Capabilities)
 		}
 		action := strings.TrimPrefix(method, info.ID+".")
-		want := ""
 		if _, ok := readOnlyVerbs[action]; ok {
-			want = "proc:read"
+			// 只读方法允许 proc:read（进程域）或 system:read（通用宿主域），两者都是 read 级。
+			if capability != "proc:read" && capability != "system:read" {
+				t.Fatalf("%s 声明 %q，只读方法期望 proc:read 或 system:read", method, capability)
+			}
 		} else if _, ok := writeVerbs[action]; ok {
-			want = "proc:write"
+			if capability != "proc:write" && capability != "system:admin" {
+				t.Fatalf("%s 声明 %q，写方法期望 proc:write 或 system:admin", method, capability)
+			}
 		} else {
 			t.Fatalf("声明了 %q，但测试分类表未覆盖该动作（新增方法必须同步只读/写分类）", method)
-		}
-		if capability != want {
-			t.Fatalf("%s 声明 %q，期望 %q（只读/写分级不可降级）", method, capability, want)
 		}
 		normalized, ok := normalizeMethod(method, info.ID)
 		if !ok || normalized != method {

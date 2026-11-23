@@ -42,6 +42,7 @@ func run(logger *slog.Logger) error {
 		SocketDir:     filepath.Dir(cfg.socket),
 		SelfExe:       selfExe,
 		MaskArgs:      cfg.maskArgs,
+		StateDir:      os.Getenv("KORE_STATE_DIR"),
 		ProtectedPIDs: cfg.protectedPIDs,
 	}, nil)
 	conn, err := net.Dial("unix", cfg.socket)

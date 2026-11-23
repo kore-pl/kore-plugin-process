@@ -18,6 +18,9 @@ kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提
 | `process.renice` | `{pid,value,confirm,name?}` | `{schema,pid,name,previous,nice,changed}` |
 | `process.tree` | `{root?}` | `{schema,roots,count,total,truncated,max_depth,max_nodes,nodes[]}` |
 | `process.ports` | `{pid?}` | `{schema,pid,scanned_processes,scanned_fds,listeners[],fds[],truncated}` |
+| `process.history` | `{}` | `{schema,points[],interval_s,count,truncated,sampled,note?}` |
+| `process.trend` | `{pid,window?}` | `{schema,pid,name,points[],count,window,insufficient_data,hint?}` |
+| `process.watchdog.suggest` | `{pid?/name?}` | `{schema,pid,name,unit_name,exec_start,user_unit,system_unit,scope_guide,boundary}` |
 
 ## 能力声明
 
@@ -27,6 +30,7 @@ kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提
 | 方法 | 方法级能力 | 内核判定 |
 | --- | --- | --- |
 | `process.list` / `process.detail` / `process.tree` / `process.ports` | `proc:read` | 只读：任意已登录会话可调，不进写审计 |
+| `process.history` / `process.trend` / `process.watchdog.suggest` | `system:read` | 只读（通用宿主域）：任意已登录会话可调，不进写审计 |
 | `process.kill` / `process.renice` | `proc:write` | admin 级：需 `proc:write`（或 `system:admin`），写审计 |
 
 未声明方法级能力时内核回退插件级 `capabilities` 取最高要求；因此本仓把 5 个业务方法

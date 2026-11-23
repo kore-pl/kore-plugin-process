@@ -1,12 +1,13 @@
 {
   "id": "process",
   "name": "进程管理插件",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "production",
   "entry": "bin/process",
   "capabilities": [
+    "system:read",
     "proc:read",
     "proc:write"
   ],
@@ -16,7 +17,10 @@
     "process.tree": "proc:read",
     "process.kill": "proc:write",
     "process.renice": "proc:write",
-    "process.ports": "proc:read"
+    "process.ports": "proc:read",
+    "process.history": "system:read",
+    "process.trend": "system:read",
+    "process.watchdog.suggest": "system:read"
   },
   "triggers": [],
   "requires_kore": ">=0.1.0 <0.2.0",
@@ -30,5 +34,5 @@
   "scenario_tags": [
     "ops"
   ],
-  "size_bytes": 1442770
+  "size_bytes": 1468451
 }

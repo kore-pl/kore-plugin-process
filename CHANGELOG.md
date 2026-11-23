@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-23
+
+### Added
+
+- `process.history`：系统级资源趋势（CPU / 内存 / load1），**60 点环形缓冲**；插件内零 ticker
+  （G-19）——只在方法被调用时按时间戳采样，距上次不足 30s 直接复用上一点；state 0600 原子写，
+  进程重启后从磁盘续读。
+- `process.trend {pid, window?}`：单进程 CPU/RSS 趋势，用 `/proc/<pid>/stat` 的 utime+stime 差分；
+  上次 tick 基线持久化在 state，**两次调用间隔 <2s 返回 `insufficient_data` + hint**，不伪造数据；
+  pid 复用（tick 回绕）重置基线。
+- `process.watchdog.suggest {pid|name}`：只生成 systemd unit 建议文本（`Restart=always` +
+  `ExecStart`）与 `systemctl --user` / 系统级二选一说明，由用户执行；返回体明确
+  「**kore 不做进程守护，守护归 systemd**」——不写 unit、不启服务、不起守护循环。
+- 方法级 capability：三者均为 `system:read`（纯读+建议）；插件级补 `system:read` 以保持
+  「方法级 ⊆ 插件级」。
+
+### Tests
+
+- `history_test.go`：环形追加/30s 复用/60 点截断、state 0600 与重启续读、trend 首次与间隔不足
+  `insufficient_data`、CPU 差分（15%/20%）、watchdog 片段幂等与边界声明、pid/name 二选一。
+
 ## [0.2.2] - 2026-11-23
 
 ### Added

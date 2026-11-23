@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pengtang1024/kore/pkg/pluginapi"
@@ -30,6 +31,8 @@ type Options struct {
 	GOOS string
 	// Now 为空时取 time.Now；测试注入假时钟验证 CPU 差分。
 	Now func() time.Time
+	// StateDir 是插件 state 目录（KORE_STATE_DIR）；空串时历史/趋势只留内存态。
+	StateDir string
 }
 
 // normalize 填充默认值。
@@ -54,6 +57,10 @@ type Runtime struct {
 	sampler       *Sampler
 	users         *userCache
 	pluginsPrefix string // 由 SelfExe 推断的 kore 插件状态树前缀；空串关闭该保护检查
+	// stateMu 串行化 history/trend 的 state 读写；mem* 是 StateDir 为空时的内存兜底。
+	stateMu    sync.Mutex
+	memHistory historyState
+	memTrend   trendState
 }
 
 // NewRuntime 构造 Runtime；src 为 nil 时使用真实 Linux /proc 执行面。
@@ -97,6 +104,12 @@ func (r *Runtime) Call(method string, params json.RawMessage) (json.RawMessage, 
 		return r.callRenice(params)
 	case "process.ports":
 		return r.callPorts(params)
+	case "process.history":
+		return r.callHistory(params)
+	case "process.trend":
+		return r.callTrend(params)
+	case "process.watchdog.suggest":
+		return r.callWatchdogSuggest(params)
 	default:
 		return nil, notFound("未知方法: " + method)
 	}
