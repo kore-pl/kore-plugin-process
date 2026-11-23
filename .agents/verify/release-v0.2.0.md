@@ -15,7 +15,7 @@
 
 | # | 缺口 | 事实 | 补法 |
 | --- | --- | --- | --- |
-| 1 | **`raceprobe_test.go` 断言与实现/内核事实不一致**（真正跑挂的测试） | 原断言“exec 后 cmdline 恒非空”，首轮 `go test` 在 `i=1` 实测 `空 cmdline: name="sleep" state="R" restricted=false` → FAIL。真实瞬态存在，但实现的内核线程口径还有 `ppid ∈ {0,2}` 约束，**不会**误判该用户进程（见 `protect.go:isKernelThread`） | 改写为守护**真实安全性质**：空 cmdline 用户进程 `ppid` 不得为 0/2、`isKernelThread=false`、`protectionReason=""`；不再断言不成立的“恒非空” |
+| 1 | **`raceprobe_test.go` 断言与实现/内核事实不一致**（真正跑挂的测试） | 原断言“exec 后 cmdline 恒非空”，首轮 `go test` 在 `i=1` 实测 `空 cmdline: name="sleep" state="R" restricted=false` → FAIL。真实瞬态存在，但实现的内核线程口径还有 `ppid ∈ {0,2}` 约束，**不会**误判该用户进程（见 `protect.go:isKernelThread`） | 改写为守护**真实安全性质**：空 cmdline 用户进程 `ppid` 不得为 0/2、`isKernelThread=false`、`protectionReason=""`；不再断言不成立的“恒非空”；另补**确定性单测**（`protect_test.go`：ppid=4242 的空 cmdline 记录不算内核线程、不受保护），不依赖瞬态是否被采样到 |
 | 2 | helper 注释把瞬态后果写错 | `internal/procfs/helper_test.go`、`tests/e2e/helpers_test.go` 原注释称“直接 kill 会被内核线程口径误判（间歇 E_UNAUTHORIZED）”，与 ppid 守卫矛盾 | 改为准确理由：等 comm/argv 稳定后再做 name 复核与脱敏断言 |
 | 3 | **README 仍停在 0.1.x 契约** | kill/tree 入参出参、`comm`→`name`、缺 `renice`、护栏表仍是 `pid≤1 → E_INVALID`、list/detail 缺 `nice`/`protected` | 按实现同步（协议表、kill 四层护栏、renice 段、tree v2 全树、九类护栏表、五个方法、测试清单）；`main.go` 包注释补“优先级调整” |
 | 4 | 故障注入注释仍写“四个方法” | `tests/fault/*.go` 5 处 | 统一为“五个方法”（新增 renice），故障类别仍为四类 |

@@ -29,6 +29,8 @@ func TestProtectionReasonMatrix(t *testing.T) {
 		{"socket-dir", Record{PID: 704, Name: "kored-dev", Cmdline: "kored-dev", Exe: "/run/kore/kored-dev"}, "kore"},
 		{"normal", Record{PID: 800, Name: "nginx", Cmdline: "nginx -g daemon off;", Exe: "/usr/sbin/nginx"}, ""},
 		{"normal-sleep", Record{PID: 801, Name: "sleep", Cmdline: "sleep 300"}, ""},
+		// exec 后瞬态：cmdline 已读到空串，但 ppid 是用户态父进程——不得进保护名单。
+		{"exec-empty-cmdline", Record{PID: 802, Name: "sleep", PPID: 4242}, ""},
 	}
 	for _, tc := range cases {
 		reason := rt.protectionReason(tc.record)
@@ -45,7 +47,7 @@ func TestProtectionReasonMatrix(t *testing.T) {
 }
 
 // TestKernelThreadEdgeCases 内核线程口径边界：restricted（读取失败）与空名不算内核线程，
-// 有 cmdline 的用户态进程不算；cmdline 为空 + stat 可读才是。
+// 有 cmdline 的用户态进程不算；cmdline 为空 + stat 可读 + ppid ∈ {0,2} 才算。
 func TestKernelThreadEdgeCases(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -56,6 +58,8 @@ func TestKernelThreadEdgeCases(t *testing.T) {
 		{"restricted-not-kthread", Record{PID: 3, Name: "hidepid", Restricted: true}, false},
 		{"nameless-not-kthread", Record{PID: 4}, false},
 		{"userspace", Record{PID: 5, Name: "bash", Cmdline: "bash"}, false},
+		// exec 瞬态：cmdline 空但 ppid 是用户态父进程（不是 0/2），绝不能判内核线程。
+		{"exec-empty-cmdline-user", Record{PID: 6, Name: "sleep", PPID: 4242}, false},
 	}
 	for _, tc := range cases {
 		if got := isKernelThread(tc.record); got != tc.want {
