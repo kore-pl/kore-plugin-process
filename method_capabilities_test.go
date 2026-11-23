@@ -34,7 +34,7 @@ var privilegedCapabilities = map[string]struct{}{
 // readOnlyVerbs 是只读业务方法清单：必须声明 proc:read。
 // 这张表是"只读 / 写"分类的验收依据——把只读方法误升为 proc:write 会让只读调用进写审计。
 var readOnlyVerbs = map[string]struct{}{
-	"list": {}, "detail": {}, "tree": {},
+	"list": {}, "detail": {}, "tree": {}, "ports": {},
 }
 
 // writeVerbs 是写业务方法清单：必须声明 proc:write（内核按 admin 级判定）。

@@ -95,6 +95,8 @@ func (r *Runtime) Call(method string, params json.RawMessage) (json.RawMessage, 
 		return r.callTree(params)
 	case "process.renice":
 		return r.callRenice(params)
+	case "process.ports":
+		return r.callPorts(params)
 	default:
 		return nil, notFound("未知方法: " + method)
 	}

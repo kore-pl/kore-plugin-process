@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-11-23
+
+### Added
+
+- `process.ports`（只读，`proc:read`）：排查「谁占了 8080」。读 `/proc/net/tcp{,6}` 的
+  LISTEN（st=0A）条目，再用 `/proc/<pid>/fd` 符号链接按 `socket:[inode]` 反查归属，返回
+  `listeners[]`（pid / name / protocol / address / port / inode）与 `fds[]`（socket 单独归类、
+  敏感路径标记、`anon_inode:` 归 other）。入参 `{pid?}`：缺省/0 扫描全部进程（进程数 ≤2000、
+  单进程 fd ≤512，命中上限 `truncated=true`）；只读 procfs、不联网、不起 ticker。
+- `internal/procfs/ports_test.go`：tcp/tcp6 LISTEN 解析（含畸形行跳过）、fd 反查与三类归类、
+  已建立连接不算监听、不存在 pid（`E_NOTFOUND`）与负 pid（`E_INVALID`）、全进程扫描跳过无 fd 进程。
+
 ## [0.2.1] - 2026-11-23
 
 ### Added

@@ -17,6 +17,7 @@ kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提
 | `process.kill` | `{pid,confirm,name,signal?,force?}` | `{schema,pid,signal,name,killed,still_alive,waited_ms,note?}` |
 | `process.renice` | `{pid,value,confirm,name?}` | `{schema,pid,name,previous,nice,changed}` |
 | `process.tree` | `{root?}` | `{schema,roots,count,total,truncated,max_depth,max_nodes,nodes[]}` |
+| `process.ports` | `{pid?}` | `{schema,pid,scanned_processes,scanned_fds,listeners[],fds[],truncated}` |
 
 ## 能力声明
 
@@ -25,7 +26,7 @@ kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提
 
 | 方法 | 方法级能力 | 内核判定 |
 | --- | --- | --- |
-| `process.list` / `process.detail` / `process.tree` | `proc:read` | 只读：任意已登录会话可调，不进写审计 |
+| `process.list` / `process.detail` / `process.tree` / `process.ports` | `proc:read` | 只读：任意已登录会话可调，不进写审计 |
 | `process.kill` / `process.renice` | `proc:write` | admin 级：需 `proc:write`（或 `system:admin`），写审计 |
 
 未声明方法级能力时内核回退插件级 `capabilities` 取最高要求；因此本仓把 5 个业务方法
@@ -83,6 +84,14 @@ started_at / elapsed_s / restricted / protected / protected_reason?`。
   不触达执行面。执行面 `EPERM` 同样映射 `E_NEED_ROOT`，`ESRCH` → `E_NOTFOUND`。
 - 结果 `{schema:"process.renice.v1",pid,name,previous,nice,changed}`：`previous` 是调整前
   的 nice，`changed=false` 表示新旧值相同（幂等调用）。
+
+### process.ports
+
+只读排查「谁占了 8080」：解析 `/proc/net/tcp{,6}` 的 LISTEN（st=0A）条目，再用
+`/proc/<pid>/fd` 的 `socket:[inode]` 反查归属。`{pid?}` 缺省/0 扫描全部进程（≤2000 进程、
+单进程 ≤512 fd，命中上限 `truncated=true`）。`fds[]` 把 `socket:[inode]` 单独归为
+`kind=socket`（命中监听时带 port/protocol），敏感路径（`/etc/shadow`、`*.pem`、`id_rsa`、
+`/.ssh/`、`.env` 等）标 `sensitive=true`，`anon_inode:` 归 `kind=other`。
 
 ### process.tree
 
