@@ -18,6 +18,20 @@ kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提
 | `process.renice` | `{pid,value,confirm,name?}` | `{schema,pid,name,previous,nice,changed}` |
 | `process.tree` | `{root?}` | `{schema,roots,count,total,truncated,max_depth,max_nodes,nodes[]}` |
 
+## 能力声明
+
+插件级 `capabilities = [proc:read, proc:write]`，并在 `info.json.method_capabilities`
+按方法细化（方法级是插件级的子集，同为内核认识的 `proc:*` 宿主能力）：
+
+| 方法 | 方法级能力 | 内核判定 |
+| --- | --- | --- |
+| `process.list` / `process.detail` / `process.tree` | `proc:read` | 只读：任意已登录会话可调，不进写审计 |
+| `process.kill` / `process.renice` | `proc:write` | admin 级：需 `proc:write`（或 `system:admin`），写审计 |
+
+未声明方法级能力时内核回退插件级 `capabilities` 取最高要求；因此本仓把 5 个业务方法
+全部显式声明，避免只读调用被按写操作审计。`method_capabilities_test.go` 是声明与实现
+的双向一致性门禁。
+
 ### process.list
 
 - 扫描 `/proc/<pid>/`，条目字段：`pid / name(comm) / state / user(uid→name) / uid /

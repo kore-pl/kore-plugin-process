@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-23
+
+### Added
+
+- `info.json` 新增 `method_capabilities`（5 条）：`process.list` / `process.detail` /
+  `process.tree` → `proc:read`，`process.kill` / `process.renice` → `proc:write`。
+  未声明时内核回退插件级 `capabilities` 取最高要求（含 `proc:write` → admin），只读方法
+  也被按写调用审计；声明后只读方法不再进写审计，写方法仍按 admin 级判定。
+- `method_capabilities_test.go`：「声明 vs 实现」双向一致性门禁——读 `info.json` 的方法
+  清单断言每条都命中 `methods.go` 的 `businessVerbs` 且 `Runtime.Call` 有分支，反向断言
+  每个业务方法都被声明；锁定只读/写分类、6 项特权能力白名单、方法级 ⊆ 插件级、
+  `manifest.json` 身份/版本/能力同步。
+
+### Changed
+
+- `methods.go` 的业务动作清单抽为 `businessVerbs` 切片（原 switch 等价改写，行为不变），
+  让 `info.json` 声明、方法分发与一致性测试共用单一事实来源。
+
 ## [0.2.0] - 2026-11-23
 
 ### Added
