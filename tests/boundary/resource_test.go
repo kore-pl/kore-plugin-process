@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -26,13 +27,14 @@ import (
 
 const resourceHelperEnv = "BOUNDARY_RESOURCE_HELPER"
 
-// TestResourceExhaustionFileDescriptors 以 ulimit -n 64（软硬限同时收紧：Go 运行时会尝试把
-// 软限抬回硬限，只收软限会被运行时撤销）启动子进程，子进程把 fd 全部占满后
-// 调 process.list：必须返回 E_INTERNAL 而不是 panic；释放 fd 后同一 Runtime 必须恢复服务。
+// TestResourceExhaustionFileDescriptors 由 helper 按自身 fd 表收紧 RLIMIT_NOFILE 后把 fd
+// 全部占满，再调 process.list：必须返回 E_INTERNAL 而不是 panic；释放 fd 后同一 Runtime
+// 必须恢复服务。不写死 `ulimit -n 64`：绝对预算会随父进程继承的 fd 漂移（继承多则 loader
+// 阶段就 EMFILE，继承少则预算耗不尽），预算改由 helper 相对自身计算。
 func TestResourceExhaustionFileDescriptors(t *testing.T) {
-	out := runLimitedHelper(t, "nofile", `ulimit -n 64; exec "$0" "$@"`)
+	out := runLimitedHelper(t, "nofile", `exec "$0" "$@"`)
 	for _, want := range []string{
-		"BOUNDARY_NOFILE_LIMIT=64",
+		"BOUNDARY_NOFILE_LIMIT=",
 		"BOUNDARY_NOFILE_ERR=E_INTERNAL",
 		"BOUNDARY_NOFILE_RECOVERED=ok",
 	} {
@@ -40,7 +42,7 @@ func TestResourceExhaustionFileDescriptors(t *testing.T) {
 			t.Fatalf("子进程输出缺少 %q：\n%s", want, out)
 		}
 	}
-	t.Logf("资源耗尽（fd）：ulimit -n 64 注入后 list 返回 E_INTERNAL，释放 fd 后恢复")
+	t.Logf("资源耗尽（fd）：相对预算注入后 list 返回 E_INTERNAL，释放 fd 后恢复")
 }
 
 // TestResourceExhaustionFileSize 以 ulimit -f 0 启动子进程：history 写 state 必须返回
@@ -87,14 +89,62 @@ func TestResourceExhaustionHelper(t *testing.T) {
 	}
 }
 
+// dropInheritedFDs 关闭从外层 shell / make 链继承来的 fd（fd ≥ 3 且未置 FD_CLOEXEC）。
+//
+// 预算按「自身已开 fd + headroom」计算，继承 fd 虽已计入总数，却会挤占 Go runtime /
+// race detector 可能懒创建的余量；外层嵌套越深（make check → sh → make → go test），
+// 继承 fd 越多，余量越不可预测。关掉之后 fd 表只由本进程决定，预算与宿主继承 fd、
+// shell 层数彻底解耦。Go 自己开的 fd 一律带 FD_CLOEXEC，不会被误关。
+func dropInheritedFDs(t *testing.T) {
+	t.Helper()
+	ents, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatalf("读取自身 fd 表失败: %v", err)
+	}
+	dropped := 0
+	for _, ent := range ents {
+		fd, convErr := strconv.Atoi(ent.Name())
+		if convErr != nil || fd < 3 {
+			continue
+		}
+		flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_GETFD, 0)
+		if errno != 0 || flags&syscall.FD_CLOEXEC != 0 {
+			continue
+		}
+		if closeErr := syscall.Close(fd); closeErr == nil {
+			dropped++
+		}
+	}
+	t.Logf("关闭继承 fd %d 个（预算只按本进程 fd 表计算）", dropped)
+}
+
 // helperNoFile 在 ulimit -n 限制下占满 fd，断言插件返回结构化错误且可恢复。
 func helperNoFile(t *testing.T) {
+	// 预算相对自身已开 fd：继承 fd / Go / race 运行时占几个 fd 全部被计入，
+	// 不写死绝对数（旧版 `ulimit -n 64` 的坑）。先清掉外层继承的 fd。
+	dropInheritedFDs(t)
+	var orig syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &orig); err != nil {
+		t.Fatalf("读取 RLIMIT_NOFILE: %v", err)
+	}
+	ents, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatalf("读取自身 fd 表: %v", err)
+	}
+	const headroom = 8
+	budget := uint64(len(ents)) + headroom
+	if budget > orig.Max {
+		t.Fatalf("预算 %d 超过外层硬限 %d：环境把 RLIMIT_NOFILE 压得过低", budget, orig.Max)
+	}
+	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{Cur: budget, Max: orig.Max}); err != nil {
+		t.Fatalf("收紧 RLIMIT_NOFILE 到 %d 失败: %v", budget, err)
+	}
 	var limit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err != nil {
 		t.Fatalf("读取 RLIMIT_NOFILE: %v", err)
 	}
-	if limit.Cur != 64 {
-		t.Fatalf("期望 ulimit -n 注入 64，实际软限 %d", limit.Cur)
+	if limit.Cur != budget {
+		t.Fatalf("RLIMIT_NOFILE 回读=%d，期望预算 %d（预算未生效）", limit.Cur, budget)
 	}
 	t.Logf("BOUNDARY_NOFILE_LIMIT=%d", limit.Cur)
 
