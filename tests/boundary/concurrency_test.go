@@ -272,3 +272,81 @@ func TestConcurrentHistoryAndTrendState(t *testing.T) {
 		t.Fatalf("trend 落盘点数=%d，期望 %d", len(proc.Points), trendCalls-1)
 	}
 }
+
+// TestConcurrentInMemoryHistoryTrendState StateDir 为空时 history/trend 走 Runtime 内存态，
+// 是同一 stateMu 保护下的共享内存：并发调用必须计数连续；去掉锁时 -race 会直接报 DATA RACE。
+func TestConcurrentInMemoryHistoryTrendState(t *testing.T) {
+	base := time.Now()
+	var clock atomic.Int64
+	rt := procfs.NewRuntime(procfs.Options{
+		ProcRoot:  realProcRoot,
+		SelfPID:   os.Getpid(),
+		ParentPID: os.Getppid(),
+		MaskArgs:  true,
+		GOOS:      "linux",
+		Now: func() time.Time {
+			return base.Add(time.Duration(clock.Add(31)) * time.Second)
+		},
+	}, nil)
+	pid := os.Getpid()
+
+	const workers = 8
+	start := make(chan struct{})
+	historyCounts := make([]int, workers/2)
+	trendCounts := make([]int, workers/2)
+	errs := make([]*pluginapi.Error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			history := index%2 == 0
+			var result json.RawMessage
+			var perr *pluginapi.Error
+			if history {
+				result, perr = rt.Call("process.history", json.RawMessage(`{}`))
+			} else {
+				result, perr = rt.Call("process.trend", json.RawMessage(fmt.Sprintf(`{"pid":%d,"window":10}`, pid)))
+			}
+			if perr != nil {
+				errs[index] = perr
+				return
+			}
+			var decoded struct {
+				Count int `json:"count"`
+			}
+			if err := json.Unmarshal(result, &decoded); err != nil {
+				errs[index] = &pluginapi.Error{Code: pluginapi.E_INTERNAL, Message: err.Error()}
+				return
+			}
+			if history {
+				historyCounts[index/2] = decoded.Count
+			} else {
+				trendCounts[index/2] = decoded.Count
+			}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, perr := range errs {
+		if perr != nil {
+			t.Fatalf("并发 worker %d 失败：%+v", i, perr)
+		}
+	}
+	sortedHistory := append([]int(nil), historyCounts...)
+	sort.Ints(sortedHistory)
+	for i, count := range sortedHistory {
+		if count != i+1 {
+			t.Fatalf("内存态 history 计数不连续（有丢更新或竞争）：%v", sortedHistory)
+		}
+	}
+	sortedTrend := append([]int(nil), trendCounts...)
+	sort.Ints(sortedTrend)
+	for i, count := range sortedTrend {
+		if count != i {
+			t.Fatalf("内存态 trend 计数不连续（首次基线应 0）：%v", sortedTrend)
+		}
+	}
+}
