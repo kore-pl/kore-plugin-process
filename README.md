@@ -1,5 +1,7 @@
 # kore-plugin-process
 
+语言：[简体中文](docs/DETAIL.md) · [English](docs/DETAIL.en.md) · [Español](docs/DETAIL.es.md) · [Français](docs/DETAIL.fr.md) · [Deutsch](docs/DETAIL.de.md) · [Русский](docs/DETAIL.ru.md) · [Português](docs/DETAIL.pt.md)
+
 kore 的进程管理插件（生产级）：**真实读取 Linux `/proc`**，提供进程列表、单进程详情、
 信号投递、进程树与优先级调整（renice）；kill 与 renice 共用同一份进程保护名单。
 `process.list` 的 `cpu_pct` 用进程内 tick 快照做差分，**零后台 ticker**——只在
@@ -200,6 +202,11 @@ make dist
 构建基线：`CGO_ENABLED=0 GOAMD64=v1 -trimpath -buildvcs=false -ldflags="-s -w"`。
 
 MIT License — pengtang1024
+
+
+## 支持本项目
+
+如果 进程管理插件 帮你省了时间，欢迎在 [GitHub](https://github.com/kore-pl/kore-plugin-process) 点个 ⭐ Star——这是作者继续维护的最大动力。也欢迎提 issue、PR 或参与讨论。
 
 <!-- oss:begin -->
 ## 开源与贡献
