@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "kore-plugin-process (process management plugin)",
+    "description": "Reads real Linux /proc data and provides process listing, per-process detail, signal delivery, process trees and nice-value changes. Production grade. kill and renice share one process protection list. process.list computes cpu_pct from an in-process tick snapshot with no backgro",
+    "detail": "docs/DETAIL.en.md"
+  }
+}

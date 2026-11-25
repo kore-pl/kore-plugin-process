@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "kore-plugin-process (plugin de gestion des processus)",
+    "description": "Lit les vraies données Linux /proc et fournit la liste des processus, le détail d'un processus, l'envoi de signaux, l'arborescence et le réglage de la valeur nice. Qualité production. kill et renice partagent une même liste de protection des processus. process.list calcule cpu_pc",
+    "detail": "docs/DETAIL.fr.md"
+  }
+}

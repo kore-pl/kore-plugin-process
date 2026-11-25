@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "kore-plugin-process (Plugin für Prozessverwaltung)",
+    "description": "Liest echte Linux-/proc-Daten und bietet Prozessliste, Detailansicht, Signalversand, Prozessbaum und Nice-Wert-Anpassung. Produktionsreif. kill und renice teilen sich eine Prozessschutzliste. process.list berechnet cpu_pct aus einem internen Tick-Snapshot ohne Hintergrund-Ticker ",
+    "detail": "docs/DETAIL.de.md"
+  }
+}

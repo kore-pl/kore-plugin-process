@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "kore-plugin-process（进程管理插件）",
+    "description": "真实读取 Linux `/proc`，提供进程列表、单进程详情、信号投递、进程树与优先级调整（renice）。生产级。kill 与 renice 共用同一份进程保护名单。`process.list` 的 `cpu_pct` 用进程内 tick 快照做差分，**零后台 ticker**——只在 `list` 调用时顺带更新基线（G-19）。 kill / renice 需要 `confirm=true` 与目标进程名，命中保护名单（自身、内核线程、主壳等）时拒绝。只读方法声明 `system:read`，写类方法为 `system:admin`。",
+    "detail": "docs/DETAIL.md"
+  }
+}
